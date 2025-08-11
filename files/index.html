@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Forest Products Transport Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { text-align: center; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 12px; }
+    th, td { border: 1px solid #ddd; padding: 4px; }
+    th { background-color: #f4f4f4; }
+    canvas { margin-top: 20px; }
+    .filter-box { margin: 20px 0; }
+    .chart-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+    .chart-container { flex: 1 1 300px; min-width: 300px; max-width: 500px; }
+    .date-filters { margin: 10px 0; }
+    input[type="date"] { padding: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Forest Products Transport Dashboard</h1>
+  
+  <!-- Manual Filter Controls -->
+  <div class="filter-box">
+    <label for="filter-key">Filter by:</label>
+    <select id="filter-key">
+      <option value="">-- Select Column --</option>
+      <option value="Permittee">Permittee</option>
+      <option value="Species">Species</option>
+      <option value="Kind of Forest Products">Kind of Forest Products</option>
+      <option value="Conveyance Type">Conveyance Type</option>
+      <option value="CENRO-Origin">CENRO-Origin</option>
+      <option value="Destination -Address/Location">Destination</option>
+    </select>
+    <input type="text" id="filter-value" placeholder="Enter filter value">
+    <button id="filter-btn">Apply Filter</button>
+    <button id="reset-btn">Reset</button>
+  </div>
+
+  <!-- Date Range Filter -->
+  <div class="date-filters">
+    <label for="date-field">Date Field:</label>
+    <select id="date-field">
+      <option value="Date Issued">Date Issued</option>
+      <option value="Expiry Date">Expiry Date</option>
+    </select>
+    From: <input type="date" id="start-date">
+    To: <input type="date" id="end-date">
+    <button id="date-filter-btn">Apply Date Filter</button>
+  </div>
+  
+  <!-- Chart Grid -->
+  <div class="chart-grid">
+    <div class="chart-container"><canvas id="chart1"></canvas></div>
+    <div class="chart-container"><canvas id="chart2"></canvas></div>
+    <div class="chart-container"><canvas id="chart3"></canvas></div>
+  </div>
+  
+  <!-- Table -->
+  <div id="table-summary"></div>
+
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT8HSD_J-VwUw-Hyq-1LphyhH8UspKKsObMPKZycURnMFhNwt2kdVXBCStTR_Az2n-pjlGMFw71YrEb/pub?output=csv';
+    let fullData = [];
+    let activeChartFilter = null;
+
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      complete: function(results) {
+        fullData = results.data.filter(row => row["Permittee"]); // remove empty rows
+        renderAllCharts(fullData);
+        renderTable(fullData);
+      }
+    });
+
+    document.getElementById('filter-btn').addEventListener('click', () => {
+      activeChartFilter = null;
+      applyAllFilters();
+    });
+
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      activeChartFilter = null;
+      document.getElementById('filter-key').value = "";
+      document.getElementById('filter-value').value = "";
+      document.getElementById('start-date').value = "";
+      document.getElementById('end-date').value = "";
+      renderAllCharts(fullData);
+      renderTable(fullData);
+    });
+
+    document.getElementById('date-filter-btn').addEventListener('click', () => {
+      activeChartFilter = null;
+      applyAllFilters();
+    });
+
+    function applyAllFilters() {
+      let filtered = [...fullData];
+
+      // Manual filter
+      const key = document.getElementById('filter-key').value;
+      const value = document.getElementById('filter-value').value.trim().toLowerCase();
+      if (key && value) {
+        filtered = filtered.filter(r => (r[key] || "").toLowerCase().includes(value));
+      }
+
+      // Date range filter
+      const dateField = document.getElementById('date-field').value;
+      const startDate = document.getElementById('start-date').value;
+      const endDate = document.getElementById('end-date').value;
+      if (startDate || endDate) {
+        filtered = filtered.filter(row => {
+          const rowDate = new Date(row[dateField]);
+          if (isNaN(rowDate)) return false;
+          if (startDate && rowDate < new Date(startDate)) return false;
+          if (endDate && rowDate > new Date(endDate)) return false;
+          return true;
+        });
+      }
+
+      renderAllCharts(filtered);
+      renderTable(filtered);
+    }
+
+    let chartInstances = [];
+    function renderAllCharts(data) {
+      chartInstances.forEach(c => c.destroy());
+      chartInstances = [];
+
+      chartInstances.push(renderChart("chart1", "No. of Pieces per Species", data, "Species", "No. of Pieces"));
+      chartInstances.push(renderChart("chart2", "m3/bd.ft. per Species", data, "Species", "m3/bd.ft."));
+      chartInstances.push(renderChart("chart3", "No. of Pieces per Product Type", data, "Kind of Forest Products", "No. of Pieces"));
+    }
+
+    function renderChart(canvasId, label, data, categoryKey, valueKey) {
+      const categoryCounts = {};
+      data.forEach(row => {
+        const category = row[categoryKey] || "Unknown";
+        const value = parseFloat(row[valueKey]) || 0;
+        categoryCounts[category] = (categoryCounts[category] || 0) + value;
+      });
+
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(categoryCounts),
+          datasets: [{
+            label: label,
+            data: Object.values(categoryCounts),
+            backgroundColor: 'rgba(54, 162, 235, 0.6)'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          onClick: (evt, elements) => {
+            if (elements.length > 0) {
+              const index = elements[0].index;
+              const selectedCategory = chart.data.labels[index];
+              
+              if (activeChartFilter && activeChartFilter.value === selectedCategory) {
+                activeChartFilter = null;
+                renderAllCharts(fullData);
+                renderTable(fullData);
+              } else {
+                activeChartFilter = { key: categoryKey, value: selectedCategory };
+                const filtered = fullData.filter(r => (r[categoryKey] || "") === selectedCategory);
+                renderAllCharts(filtered);
+                renderTable(filtered);
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { autoSkip: false, maxRotation: 90, minRotation: 45 } }
+          }
+        }
+      });
+
+      return chart;
+    }
+
+    function renderTable(data) {
+      const container = document.getElementById('table-summary');
+      container.innerHTML = '';
+
+      const table = document.createElement('table');
+      const headers = Object.keys(fullData[0]);
+      
+      const thead = table.createTHead();
+      const headerRow = thead.insertRow();
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        headerRow.appendChild(th);
+      });
+
+      const tbody = table.createTBody();
+      data.forEach(row => {
+        const tr = tbody.insertRow();
+        headers.forEach(h => {
+          const td = tr.insertCell();
+          td.textContent = row[h] || "";
+        });
+      });
+
+      container.appendChild(table);
+    }
+  </script>
+</body>
+</html>

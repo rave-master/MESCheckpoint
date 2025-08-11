@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Forest Products Transport Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f8f9fa;
+    }
+    h1 {
+      text-align: center;
+    }
+    .search-box {
+      margin-bottom: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      background: white;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 6px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      background-color: #007BFF;
+      color: white;
+    }
+    tr:nth-child(even) {
+      background-color: #f2f2f2;
+    }
+    img {
+      max-width: 100px;
+      max-height: 80px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    canvas {
+      margin-top: 30px;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Forest Products Transport Dashboard</h1>
+
+<input type="text" id="searchInput" class="search-box" placeholder="Search records..." onkeyup="filterTable()">
+
+<table id="dataTable">
+  <thead>
+    <tr id="tableHeader"></tr>
+  </thead>
+  <tbody id="tableBody"></tbody>
+</table>
+
+<canvas id="chart" height="100"></canvas>
+
+<script>
+const DATA_URL = "https://script.google.com/macros/s/AKfycbyYReWmhvUY-ECqMaSEP2oNft1GzfjK01du-hNdUk_fn5KOaymGcebSDF0KREBzMJzvNQ/exec";
+
+function convertDriveLink(url) {
+  if (!url) return "";
+  // Format 1: open?id=FILEID
+  if (url.includes("open?id=")) {
+    return url.replace("open?id=", "uc?export=view&id=");
+  }
+  // Format 2: file/d/FILEID/view
+  const match = url.match(/\/d\/(.*?)\//);
+  if (match) {
+    return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+  }
+  return url;
+}
+
+fetch(DATA_URL)
+  .then(response => response.json())
+  .then(data => {
+    if (!Array.isArray(data)) {
+      alert("Data is not in expected array format");
+      return;
+    }
+
+    const tableHeader = document.getElementById("tableHeader");
+    const tableBody = document.getElementById("tableBody");
+
+    const headers = Object.keys(data[0]);
+    headers.forEach(h => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      tableHeader.appendChild(th);
+    });
+
+    data.forEach(row => {
+      const tr = document.createElement("tr");
+      headers.forEach(h => {
+        const td = document.createElement("td");
+
+        if (h.toLowerCase().includes("photo")) {
+          const url = row[h];
+          if (url) {
+            const img = document.createElement("img");
+            img.src = convertDriveLink(url);
+            img.onclick = () => window.open(url, "_blank");
+            td.appendChild(img);
+          }
+        } else {
+          td.textContent = row[h] || "";
+        }
+
+        tr.appendChild(td);
+      });
+      tableBody.appendChild(tr);
+    });
+
+    // Chart: count per "Kind of Forest Products"
+    const kindCounts = {};
+    data.forEach(row => {
+      const kind = row["Kind of Forest Products"] || "Unknown";
+      kindCounts[kind] = (kindCounts[kind] || 0) + 1;
+    });
+
+    new Chart(document.getElementById("chart"), {
+      type: "bar",
+      data: {
+        labels: Object.keys(kindCounts),
+        datasets: [{
+          label: "Number of Records",
+          data: Object.values(kindCounts),
+          backgroundColor: "#28a745"
+        }]
+      }
+    });
+  })
+  .catch(err => console.error("Error fetching data:", err));
+
+function filterTable() {
+  const searchValue = document.getElementById("searchInput").value.toLowerCase();
+  const rows = document.querySelectorAll("#dataTable tbody tr");
+  rows.forEach(row => {
+    const cells = Array.from(row.getElementsByTagName("td"));
+    row.style.display = cells.some(cell => cell.textContent.toLowerCase().includes(searchValue)) ? "" : "none";
+  });
+}
+</script>
+
+</body>
+</html>
+
