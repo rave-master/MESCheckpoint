@@ -18,12 +18,13 @@
   img { max-width: 100px; max-height: 80px; cursor: pointer; border-radius: 4px; }
   tfoot td { font-weight: bold; background: #e9ecef; }
   .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 20px; }
-  .chart-container { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 250px; }
+  .chart-container { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 300px; display: flex; align-items: center; justify-content: center; }
+  .chart-container canvas { max-width: 100%; max-height: 100%; }
 </style>
 </head>
 <body>
 
-<h1>Forest Products Transport<br>Monitoring Dashboard</h1>
+<h1>Forest Products Transport<br>Monitoring Dashboard<br> -Km.48-</h1>
 
 <input type="text" id="searchInput" class="search-box" placeholder="Search records..." onkeyup="filterTable()">
 
@@ -65,10 +66,20 @@ function convertDriveLink(url) {
 
 function formatDate(value) {
   let d;
-  if (!isNaN(value) && value > 1000 && value < 60000) d = new Date((value - 25569) * 86400 * 1000);
-  else d = new Date(value);
+  if (!isNaN(value) && value > 1000 && value < 60000) {
+    d = new Date((value - 25569) * 86400 * 1000);
+  } else {
+    d = new Date(value);
+  }
   if (isNaN(d)) return value;
-  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('en-US', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: '2-digit', 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: true 
+  }).toUpperCase();
 }
 
 fetch(DATA_URL)
@@ -86,7 +97,12 @@ fetch(DATA_URL)
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}`;
     }))].sort();
 
-    currentMonthIndex = 0;
+    // Auto-select the current month if available
+    const now = new Date();
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}`;
+    currentMonthIndex = monthList.indexOf(currentMonthStr);
+    if (currentMonthIndex === -1) currentMonthIndex = monthList.length - 1;
+
     renderTableAndCharts();
   });
 
@@ -95,16 +111,18 @@ function renderTableAndCharts() {
   const tableHeader = document.getElementById("tableHeader");
   const tableBody = document.getElementById("tableBody");
   const tableFooter = document.getElementById("tableFooter");
-  tableHeader.innerHTML = ""; tableBody.innerHTML = ""; tableFooter.innerHTML = "";
+  tableHeader.innerHTML = ""; 
+  tableBody.innerHTML = ""; 
+  tableFooter.innerHTML = "";
 
   headers.forEach(h => {
     const th = document.createElement("th");
-    th.textContent = h;
+    th.textContent = h.toUpperCase();
     tableHeader.appendChild(th);
   });
 
   const month = monthList[currentMonthIndex];
-  document.getElementById("monthLabel").textContent = formatMonthLabel(month);
+  document.getElementById("monthLabel").textContent = formatMonthLabel(month).toUpperCase();
 
   const dateKey = headers.find(k => k.toLowerCase().includes("date"));
   const cuKey = headers.find(k => k.toLowerCase().includes("cu.m"));
@@ -132,7 +150,7 @@ function renderTableAndCharts() {
             img.onclick = () => window.open(url, "_blank");
             td.appendChild(img);
           }
-        } else if (key.includes("timestamp") || key === "date") {
+        } else if (key.includes("timestamp") || key === "date" || key.includes("date/ time")) {
           td.textContent = formatDate(row[key]);
         } else {
           td.textContent = row[key] || "";
@@ -154,7 +172,22 @@ function renderTableAndCharts() {
   });
 
   const footerRow = document.createElement("tr");
-  footerRow.innerHTML = `<td colspan="${headers.length}">Total: ${totalCu.toFixed(2)} cu.m., ${totalBd.toFixed(2)} bd.ft, ${totalPieces} pieces</td>`;
+  headers.forEach(h => {
+    const key = h.toLowerCase();
+    const td = document.createElement("td");
+    if (key.includes("cu.m")) {
+      td.textContent = totalCu.toFixed(2) + " CU.M.";
+    } else if (key.includes("bd.ft")) {
+      td.textContent = totalBd.toFixed(2) + " BD.FT";
+    } else if (key.includes("pieces")) {
+      td.textContent = totalPieces + " PIECES";
+    } else if (headers.indexOf(h) === 0) {
+      td.textContent = "TOTAL:";
+    } else {
+      td.textContent = "";
+    }
+    footerRow.appendChild(td);
+  });
   tableFooter.appendChild(footerRow);
 
   renderCharts(kindCounts, speciesCounts, dailyCounts);
@@ -170,7 +203,8 @@ function renderCharts(kindCounts, speciesCounts, dailyCounts) {
     data: {
       labels: Object.keys(kindCounts),
       datasets: [{ label: "Kind", data: Object.values(kindCounts), backgroundColor: "#007BFF" }]
-    }
+    },
+    options: { responsive: true, maintainAspectRatio: false }
   });
 
   speciesChart = new Chart(document.getElementById("chartSpecies"), {
@@ -178,7 +212,8 @@ function renderCharts(kindCounts, speciesCounts, dailyCounts) {
     data: {
       labels: Object.keys(speciesCounts),
       datasets: [{ label: "Species", data: Object.values(speciesCounts), backgroundColor: ["#28a745","#ffc107","#17a2b8","#dc3545","#6f42c1"] }]
-    }
+    },
+    options: { responsive: true, maintainAspectRatio: false }
   });
 
   timelineChart = new Chart(document.getElementById("chartTimeline"), {
@@ -186,7 +221,8 @@ function renderCharts(kindCounts, speciesCounts, dailyCounts) {
     data: {
       labels: Object.keys(dailyCounts),
       datasets: [{ label: "Daily Trend", data: Object.values(dailyCounts), fill: false, borderColor: "#17a2b8" }]
-    }
+    },
+    options: { responsive: true, maintainAspectRatio: false }
   });
 }
 
